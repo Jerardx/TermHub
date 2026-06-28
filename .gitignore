@@ -1,0 +1,9 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Build artifacts
+build/
+
+# macOS
+.DS_Store
