@@ -110,6 +110,14 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
         view.terminate()
     }
 
+    /// Send a line (a trailing newline is added) to each of the given sessions.
+    func broadcast(_ command: String, to ids: [UUID]) {
+        let line = command + "\n"
+        for id in ids {
+            views[id]?.send(txt: line)
+        }
+    }
+
     // MARK: LocalProcessTerminalViewDelegate
 
     nonisolated func processTerminated(source: TerminalView, exitCode: Int32?) {

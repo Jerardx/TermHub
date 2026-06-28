@@ -163,6 +163,22 @@ final class AppState: ObservableObject {
 
     static let maxPanes = 4
 
+    /// Broadcast input feature: sessions that receive broadcast commands.
+    @Published var broadcastTargets: Set<UUID> = []
+    @Published var showBroadcastBar: Bool = false
+
+    func isBroadcastTarget(_ id: UUID) -> Bool { broadcastTargets.contains(id) }
+
+    func toggleBroadcast(_ id: UUID) {
+        if broadcastTargets.contains(id) { broadcastTargets.remove(id) }
+        else { broadcastTargets.insert(id) }
+    }
+
+    /// Targets that still exist, in workspace order.
+    var orderedBroadcastTargets: [UUID] {
+        allSessions.map(\.id).filter { broadcastTargets.contains($0) }
+    }
+
     private var cancellables: Set<AnyCancellable> = []
 
     init() {
@@ -215,6 +231,7 @@ final class AppState: ObservableObject {
             }
         }
         paneIDs.removeAll { $0 == id }
+        broadcastTargets.remove(id)
         if selectedSessionID == id {
             selectedSessionID = allSessions.first?.id
         } else if paneIDs.isEmpty, let sel = selectedSessionID {
@@ -227,6 +244,7 @@ final class AppState: ObservableObject {
         let removedIDs = Set(groups.first(where: { $0.id == id })?.sessions.map(\.id) ?? [])
         groups.removeAll { $0.id == id }
         paneIDs.removeAll { removedIDs.contains($0) }
+        broadcastTargets.subtract(removedIDs)
         if let sel = selectedSessionID, removedIDs.contains(sel) {
             selectedSessionID = allSessions.first?.id
         } else if paneIDs.isEmpty, let sel = selectedSessionID {

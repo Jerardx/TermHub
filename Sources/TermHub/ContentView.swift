@@ -131,25 +131,37 @@ struct ContentView: View {
                 }
             }
         } detail: {
-            Group {
-                if appState.paneIDs.isEmpty {
-                    ContentUnavailableView(
-                        "No Sessions",
-                        systemImage: "terminal",
-                        description: Text("Create a session to get started.")
-                    )
-                } else {
-                    HStack(spacing: 1) {
-                        ForEach(appState.paneIDs, id: \.self) { id in
-                            PaneView(controller: controller, id: id, showChrome: appState.isSplit)
+            VStack(spacing: 0) {
+                Group {
+                    if appState.paneIDs.isEmpty {
+                        ContentUnavailableView(
+                            "No Sessions",
+                            systemImage: "terminal",
+                            description: Text("Create a session to get started.")
+                        )
+                    } else {
+                        HStack(spacing: 1) {
+                            ForEach(appState.paneIDs, id: \.self) { id in
+                                PaneView(controller: controller, id: id, showChrome: appState.isSplit)
+                            }
                         }
+                        .background(Color(nsColor: .separatorColor))
                     }
-                    .background(Color(nsColor: .separatorColor))
+                }
+                if appState.showBroadcastBar {
+                    Divider()
+                    BroadcastBar(controller: controller)
                 }
             }
             .navigationTitle(appState.session(id: appState.selectedSessionID)?.title ?? "TermHub")
             .toolbar {
                 ToolbarItemGroup {
+                    Button { toggleBroadcastBar() } label: {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                    }
+                    .help("Broadcast a command to multiple sessions")
+                    .foregroundStyle(appState.showBroadcastBar ? Color.accentColor : Color.primary)
+
                     Button { appState.splitCurrent() } label: {
                         Image(systemName: "rectangle.split.2x1")
                     }
@@ -182,6 +194,69 @@ struct ContentView: View {
         .sheet(isPresented: $showProfiles) { ManageProfilesSheet() }
         .sheet(item: $editingProfile) { profile in ProfileEditorSheet(profile: profile) }
     }
+
+    private func toggleBroadcastBar() {
+        appState.showBroadcastBar.toggle()
+        // Sensible default: target the sessions currently on screen.
+        if appState.showBroadcastBar && appState.broadcastTargets.isEmpty {
+            appState.broadcastTargets = Set(appState.paneIDs)
+        }
+    }
+}
+
+/// Bottom bar to type a command once and send it to all broadcast targets.
+struct BroadcastBar: View {
+    @EnvironmentObject var appState: AppState
+    let controller: TerminalController
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    private var targetCount: Int { appState.orderedBroadcastTargets.count }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "antenna.radiowaves.left.and.right")
+                .foregroundStyle(.tint)
+            Menu {
+                Button("All Sessions") {
+                    appState.broadcastTargets = Set(appState.allSessions.map(\.id))
+                }
+                Button("Visible Panes") {
+                    appState.broadcastTargets = Set(appState.paneIDs)
+                }
+                Button("Focused Group") {
+                    if let id = appState.selectedSessionID, let g = appState.group(containing: id) {
+                        appState.broadcastTargets = Set(g.sessions.map(\.id))
+                    }
+                }
+                Divider()
+                Button("Clear Targets") { appState.broadcastTargets = [] }
+            } label: {
+                Text("\(targetCount) target\(targetCount == 1 ? "" : "s")")
+            }
+            .fixedSize()
+
+            TextField("Broadcast command to targets…", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit(send)
+
+            Button("Send", action: send)
+                .disabled(text.isEmpty || targetCount == 0)
+        }
+        .padding(8)
+        .background(.bar)
+        .onAppear { focused = true }
+    }
+
+    private func send() {
+        let cmd = text
+        let targets = appState.orderedBroadcastTargets
+        guard !cmd.isEmpty, !targets.isEmpty else { return }
+        controller.broadcast(cmd, to: targets)
+        text = ""
+        focused = true
+    }
 }
 
 // MARK: - Sidebar
@@ -200,7 +275,7 @@ struct SidebarView: View {
             ForEach(appState.groups) { group in
                 DisclosureGroup(isExpanded: expansion(for: group)) {
                     ForEach(group.sessions) { session in
-                        SessionRow(session: session)
+                        SessionRow(session: session, isBroadcast: appState.isBroadcastTarget(session.id))
                             .tag(session.id)
                             .draggable(session.id.uuidString)
                             .dropDestination(for: String.self) { items, _ in
@@ -240,6 +315,9 @@ struct SidebarView: View {
     private func sessionMenu(_ session: TerminalSession, in group: SessionGroup) -> some View {
         Button("Edit…") { onEditSession(session) }
         Button("Open in Split") { appState.openInSplit(session.id) }
+        Button(appState.isBroadcastTarget(session.id) ? "Remove from Broadcast" : "Add to Broadcast") {
+            appState.toggleBroadcast(session.id)
+        }
         if appState.groups.count > 1 {
             Menu("Move to Group") {
                 ForEach(appState.groups.filter { $0.id != group.id }) { target in
@@ -301,6 +379,7 @@ struct GroupHeader: View {
 
 struct SessionRow: View {
     @ObservedObject var session: TerminalSession
+    var isBroadcast: Bool = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -310,6 +389,12 @@ struct SessionRow: View {
             Text(session.title)
                 .lineLimit(1)
             Spacer()
+            if isBroadcast {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.caption2)
+                    .foregroundStyle(.tint)
+                    .help("Broadcast target")
+            }
             if session.hasUnread {
                 Circle()
                     .fill(Color.accentColor)
