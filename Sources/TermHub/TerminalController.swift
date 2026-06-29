@@ -49,9 +49,45 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
     /// Normal-buffer scrollback kept per session so you can scroll back far.
     private let scrollbackLines = 10_000
 
+    /// Local monitor that fixes mouse-wheel scrolling (see `installScrollMonitor`).
+    private var scrollMonitor: Any?
+
     func attach(_ appState: AppState) {
         self.appState = appState
         Self.shared = self
+        installScrollMonitor()
+    }
+
+    deinit {
+        if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
+    }
+
+    /// SwiftTerm's `scrollWheel` only reads the legacy `event.deltaY`, which is 0
+    /// for precise-scrolling devices (trackpads, Magic Mouse, many modern mice),
+    /// so the wheel does nothing there while click-drag selection still scrolls.
+    /// Its `scrollWheel` is `public` (not `open`), so we can't override it — catch
+    /// scroll events app-side instead and drive the hit terminal ourselves.
+    private func installScrollMonitor() {
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            guard let window = event.window,
+                  let hit = window.contentView?.hitTest(event.locationInWindow) else { return event }
+            var view: NSView? = hit
+            while let cur = view {
+                if let term = cur as? SessionTerminalView {
+                    let precise = event.hasPreciseScrollingDeltas
+                    let delta = precise ? event.scrollingDeltaY : event.deltaY
+                    if delta != 0 {
+                        let lines = precise
+                            ? max(1, Int((abs(delta) / 10).rounded()))
+                            : max(1, Int(abs(delta)))
+                        if delta > 0 { term.scrollUp(lines: lines) } else { term.scrollDown(lines: lines) }
+                    }
+                    return nil // consume so SwiftTerm's broken handler doesn't also run
+                }
+                view = cur.superview
+            }
+            return event
+        }
     }
 
     // MARK: Session log files
@@ -204,6 +240,13 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
     /// terminal (works even when the mouse wheel keeps getting snapped to the
     /// bottom by a continuously-repainting TUI).
     enum ScrollAction { case pageUp, pageDown, lineUp, lineDown, top, bottom }
+
+    /// Current scroll position (0…1, 1 == bottom) and whether the session can
+    /// scroll at all — drives the on-screen scroll indicator.
+    func scrollInfo(for id: UUID) -> (position: Double, canScroll: Bool)? {
+        guard let view = views[id] else { return nil }
+        return (view.scrollPosition, view.canScroll)
+    }
 
     func scrollSelected(_ action: ScrollAction) {
         guard let id = appState?.selectedSessionID, let view = views[id] else { return }

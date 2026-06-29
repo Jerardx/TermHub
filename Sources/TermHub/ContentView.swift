@@ -77,11 +77,50 @@ struct PaneView: View {
                 Divider()
             }
             TerminalPaneView(controller: controller, sessionID: id, isFocused: focused)
+                .overlay(alignment: .trailing) {
+                    ScrollBar(controller: controller, id: id)
+                }
         }
         .overlay(
             Rectangle()
                 .strokeBorder(focused && showChrome ? Color.accentColor : .clear, lineWidth: 2)
         )
+    }
+}
+
+/// Thin position indicator shown on the right edge of a terminal while it is
+/// scrolled up into history; auto-hides at the bottom. Polls the live view's
+/// `scrollPosition` (it isn't a published value).
+struct ScrollBar: View {
+    let controller: TerminalController
+    let id: UUID
+
+    @State private var position: Double = 1
+    @State private var canScroll = false
+    private let ticker = Timer.publish(every: 0.08, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        GeometryReader { geo in
+            let visible = canScroll && position < 0.999
+            let track = geo.size.height
+            let knob = max(28, track * 0.12)
+            let y = (track - knob) * position
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.secondary.opacity(0.55))
+                .frame(width: 5, height: knob)
+                .padding(.trailing, 2)
+                .offset(y: y)
+                .opacity(visible ? 1 : 0)
+                .animation(.easeOut(duration: 0.15), value: visible)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .allowsHitTesting(false)
+        .onReceive(ticker) { _ in
+            if let info = controller.scrollInfo(for: id) {
+                position = info.position
+                canScroll = info.canScroll
+            }
+        }
     }
 }
 
