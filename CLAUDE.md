@@ -66,9 +66,12 @@ Groups & sessions CRUD · status indicators (running / exited-0 / failed) ·
 unread-output dot · live-activity pulse (status dot pulses while output is
 streaming) · per-session mute (suppresses the unread dot and the activity pulse;
 persisted) · auto-run command per session · restart/stop · ⌘1–9 & ⌘[/⌘]
-navigation · global ⌘⌥T show/hide · exit notifications · profiles/templates
-(incl. "Save All Groups as Profile") · split view (up to 4 panes) · drag-and-drop
-reordering and moving sessions between groups.
+navigation · global ⌘⌥T show/hide · exit notifications · 10k-line scrollback +
+per-session output log (raw pty mirror, recoverable even after a full-screen TUI;
+"Open Session Log" / "Reveal Log in Finder" in the context menu) · child shells
+terminated on app quit (no orphaned ptys) · profiles/templates (incl. "Save All
+Groups as Profile") · split view (up to 4 panes) · drag-and-drop reordering and
+moving sessions between groups.
 
 ## Conventions
 

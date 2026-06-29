@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // MARK: - Status color
 
@@ -98,6 +99,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             SidebarView(
+                controller: controller,
                 onNewSession: { group in newSession = NewSessionDraft(groupID: group?.id) },
                 onEditSession: { editing = $0 },
                 onSaveGroupAsProfile: { group in editingProfile = appState.makeProfile(from: group) }
@@ -263,6 +265,7 @@ struct BroadcastBar: View {
 
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState
+    var controller: TerminalController
     var onNewSession: (SessionGroup?) -> Void
     var onEditSession: (TerminalSession) -> Void
     var onSaveGroupAsProfile: (SessionGroup) -> Void
@@ -334,6 +337,9 @@ struct SidebarView: View {
             }
         }
         Divider()
+        Button("Open Session Log") { openLog(session) }
+        Button("Reveal Log in Finder") { revealLog(session) }
+        Divider()
         Button("Remove", role: .destructive) { appState.removeSession(session.id) }
     }
 
@@ -353,6 +359,18 @@ struct SidebarView: View {
     }
 
     // MARK: Helpers
+
+    private func openLog(_ session: TerminalSession) {
+        let url = controller.logURL(for: session.id)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func revealLog(_ session: TerminalSession) {
+        let url = controller.logURL(for: session.id)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
 
     private func drop(_ items: [String], into group: SessionGroup, before beforeID: UUID?) -> Bool {
         guard let first = items.first, let dropped = UUID(uuidString: first) else { return false }

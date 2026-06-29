@@ -22,6 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Stop every live child shell so pty children don't survive as orphans.
+        TerminalController.shared?.terminateAll()
+    }
 }
 
 @main

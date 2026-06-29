@@ -1,15 +1,27 @@
 import AppKit
 import SwiftTerm
 
-/// A SwiftTerm local-process view that remembers which session it belongs to
-/// and reports output activity (for the "unread" indicator).
+/// A SwiftTerm local-process view that remembers which session it belongs to,
+/// reports output activity (for the "unread"/pulse indicators), and mirrors all
+/// pty output to a log file so the full history is recoverable even after a
+/// full-screen (alternate-buffer) TUI clears the visible scrollback.
 final class SessionTerminalView: LocalProcessTerminalView {
     var sessionID: UUID = UUID()
     var onActivity: (() -> Void)?
+    /// Open file handle the raw pty output is appended to (nil = not logging).
+    var logHandle: FileHandle?
 
     public override func dataReceived(slice: ArraySlice<UInt8>) {
         super.dataReceived(slice: slice)
+        if let logHandle { try? logHandle.write(contentsOf: Data(slice)) }
         onActivity?()
+    }
+
+    /// Flush and detach the log file (on restart/stop/exit/teardown).
+    func closeLog() {
+        try? logHandle?.synchronize()
+        try? logHandle?.close()
+        logHandle = nil
     }
 }
 
@@ -23,6 +35,10 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
     /// Bumped when a terminal view is replaced (e.g. restart) so panes remount it.
     @Published private(set) var revision = 0
 
+    /// Weak handle so `AppDelegate.applicationWillTerminate` can stop every child
+    /// shell on quit (otherwise pty children can survive as orphans).
+    private(set) static weak var shared: TerminalController?
+
     private var views: [UUID: SessionTerminalView] = [:]
     private weak var appState: AppState?
 
@@ -30,9 +46,35 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
     private var activityTimers: [UUID: DispatchWorkItem] = [:]
     /// How long after the last output a session is still considered "active".
     private let activityFade: TimeInterval = 1.8
+    /// Normal-buffer scrollback kept per session so you can scroll back far.
+    private let scrollbackLines = 10_000
 
     func attach(_ appState: AppState) {
         self.appState = appState
+        Self.shared = self
+    }
+
+    // MARK: Session log files
+
+    /// Directory holding one raw-output log per session.
+    private func logsDir() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = base.appendingPathComponent("TermHub/logs", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Log file URL for a session (raw terminal output, includes escape codes —
+    /// view with `less -R` / `cat`).
+    func logURL(for id: UUID) -> URL {
+        logsDir().appendingPathComponent("\(id.uuidString).log")
+    }
+
+    /// Truncate and open the session's log file, returning a handle to append to.
+    private func openLog(for id: UUID) -> FileHandle? {
+        let url = logURL(for: id)
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        return try? FileHandle(forWritingTo: url)
     }
 
     /// Drop terminals for sessions that no longer exist. Terminals for live
@@ -43,6 +85,7 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
         let wanted = Set(appState.allSessions.map(\.id))
         for (id, view) in views where !wanted.contains(id) {
             clearActivity(id)
+            view.closeLog()
             view.terminate()
             view.removeFromSuperview()
             views.removeValue(forKey: id)
@@ -109,6 +152,11 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
             execName: "-\(shellName)",
             currentDirectory: cwd
         )
+        // Keep a long scrollback and mirror output to a log file so history is
+        // recoverable even after a full-screen TUI (alt buffer has no scrollback).
+        view.getTerminal().changeScrollback(scrollbackLines)
+        view.closeLog()
+        view.logHandle = openLog(for: session.id)
         session.state = .running
         session.hasUnread = false
 
@@ -129,6 +177,7 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
         // first start for a session that hasn't been opened yet.
         if let view = views[id] {
             clearActivity(id)
+            view.closeLog()
             view.terminate()
             view.removeFromSuperview()
             views.removeValue(forKey: id)
@@ -140,6 +189,15 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
     func terminateSelected() {
         guard let id = appState?.selectedSessionID, let view = views[id] else { return }
         view.terminate()
+    }
+
+    /// Stop every live child shell. Called on app quit so pty children don't
+    /// survive as orphans.
+    func terminateAll() {
+        for (_, view) in views {
+            view.closeLog()
+            view.terminate()
+        }
     }
 
     /// Send a line (a trailing newline is added) to each of the given sessions.
@@ -158,6 +216,7 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
         Task { @MainActor [weak self] in
             guard let self, let session = self.appState?.session(id: view.sessionID) else { return }
             self.clearActivity(session.id)
+            view.closeLog()
             session.state = .exited(code)
             let isForeground = NSApp.isActive && self.appState?.selectedSessionID == session.id
             if !isForeground {
