@@ -11,10 +11,44 @@ final class SessionTerminalView: LocalProcessTerminalView {
     /// Open file handle the raw pty output is appended to (nil = not logging).
     var logHandle: FileHandle?
 
+    /// Scroll-lock: while the user is scrolled up into history we *hold* new
+    /// output instead of feeding it to the terminal, because SwiftTerm snaps the
+    /// viewport to the bottom on every new line (its `userScrolling` guard is
+    /// internal and never set, so we can't ask it not to). Held bytes are still
+    /// logged and still flagged as activity; they're flushed when the user
+    /// scrolls back to the bottom. This is the classic terminal "scroll lock".
+    private(set) var isScrollLocked = false
+    private var heldOutput: [UInt8] = []
+    private let heldCap = 8_000_000 // bytes; flush+resume if a parked view fills up
+
     public override func dataReceived(slice: ArraySlice<UInt8>) {
-        super.dataReceived(slice: slice)
         if let logHandle { try? logHandle.write(contentsOf: Data(slice)) }
+        if isScrollLocked {
+            heldOutput.append(contentsOf: slice)
+            if heldOutput.count > heldCap { unlockScrollAndFlush() }
+            onActivity?()
+            return
+        }
+        super.dataReceived(slice: slice)
         onActivity?()
+    }
+
+    /// Freeze the viewport (called once the user scrolls off the bottom).
+    func lockScroll() { isScrollLocked = true }
+
+    /// Resume live output, feeding everything buffered while locked.
+    func unlockScrollAndFlush() {
+        isScrollLocked = false
+        guard !heldOutput.isEmpty else { return }
+        let data = heldOutput
+        heldOutput.removeAll(keepingCapacity: false)
+        super.dataReceived(slice: data[...]) // [UInt8] slice == ArraySlice<UInt8>
+    }
+
+    /// After a user scroll: lock when parked in history, unlock+flush at bottom.
+    func updateScrollLock() {
+        guard canScroll else { unlockScrollAndFlush(); return }
+        if scrollPosition >= 0.999 { unlockScrollAndFlush() } else { lockScroll() }
     }
 
     /// Flush and detach the log file (on restart/stop/exit/teardown).
@@ -81,6 +115,7 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
                             ? max(1, Int((abs(delta) / 10).rounded()))
                             : max(1, Int(abs(delta)))
                         if delta > 0 { term.scrollUp(lines: lines) } else { term.scrollDown(lines: lines) }
+                        term.updateScrollLock()
                     }
                     return nil // consume so SwiftTerm's broken handler doesn't also run
                 }
@@ -241,11 +276,12 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
     /// bottom by a continuously-repainting TUI).
     enum ScrollAction { case pageUp, pageDown, lineUp, lineDown, top, bottom }
 
-    /// Current scroll position (0…1, 1 == bottom) and whether the session can
-    /// scroll at all — drives the on-screen scroll indicator.
-    func scrollInfo(for id: UUID) -> (position: Double, canScroll: Bool)? {
+    /// Current scroll position (0…1, 1 == bottom), whether the session can
+    /// scroll, and whether output is currently parked (scroll-locked) — drives
+    /// the on-screen scroll indicator.
+    func scrollInfo(for id: UUID) -> (position: Double, canScroll: Bool, locked: Bool)? {
         guard let view = views[id] else { return nil }
-        return (view.scrollPosition, view.canScroll)
+        return (view.scrollPosition, view.canScroll, view.isScrollLocked)
     }
 
     func scrollSelected(_ action: ScrollAction) {
@@ -259,6 +295,7 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
         case .top:      view.scrollUp(lines: bigJump)
         case .bottom:   view.scrollDown(lines: bigJump)
         }
+        view.updateScrollLock()
     }
 
     /// Send a line (a trailing newline is added) to each of the given sessions.

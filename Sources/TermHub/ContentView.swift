@@ -97,6 +97,7 @@ struct ScrollBar: View {
 
     @State private var position: Double = 1
     @State private var canScroll = false
+    @State private var locked = false
     private let ticker = Timer.publish(every: 0.08, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -106,19 +107,21 @@ struct ScrollBar: View {
             let knob = max(28, track * 0.12)
             let y = (track - knob) * position
             RoundedRectangle(cornerRadius: 3)
-                .fill(Color.secondary.opacity(0.55))
+                .fill(locked ? Color.accentColor.opacity(0.85) : Color.secondary.opacity(0.55))
                 .frame(width: 5, height: knob)
                 .padding(.trailing, 2)
                 .offset(y: y)
                 .opacity(visible ? 1 : 0)
                 .animation(.easeOut(duration: 0.15), value: visible)
                 .frame(maxWidth: .infinity, alignment: .trailing)
+                .help(locked ? "Output paused — scroll to bottom to resume" : "")
         }
         .allowsHitTesting(false)
         .onReceive(ticker) { _ in
             if let info = controller.scrollInfo(for: id) {
                 position = info.position
                 canScroll = info.canScroll
+                locked = info.locked
             }
         }
     }
