@@ -43,14 +43,18 @@ struct TermHubApp: App {
         }
         .windowStyle(.titleBar)
         .commands {
-            SessionCommands(appState: appState)
+            SessionCommands(appState: appState, controller: controller)
         }
     }
 }
 
-/// Menu-bar commands for keyboard navigation between sessions.
+/// Menu-bar commands for keyboard navigation between sessions and for scrolling
+/// the focused terminal (the wheel/trackpad gets snapped back to the bottom by
+/// continuously-repainting TUIs, so explicit scroll commands are the reliable
+/// way to review history live).
 struct SessionCommands: Commands {
     @ObservedObject var appState: AppState
+    var controller: TerminalController
 
     var body: some Commands {
         CommandMenu("Session") {
@@ -63,6 +67,21 @@ struct SessionCommands: Commands {
                 Button("Switch to Session \(i + 1)") { appState.select(index: i) }
                     .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: .command)
             }
+        }
+        CommandMenu("Scroll") {
+            Button("Page Up") { controller.scrollSelected(.pageUp) }
+                .keyboardShortcut(.pageUp, modifiers: .shift)
+            Button("Page Down") { controller.scrollSelected(.pageDown) }
+                .keyboardShortcut(.pageDown, modifiers: .shift)
+            Button("Line Up") { controller.scrollSelected(.lineUp) }
+                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+            Button("Line Down") { controller.scrollSelected(.lineDown) }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+            Divider()
+            Button("Scroll to Top") { controller.scrollSelected(.top) }
+                .keyboardShortcut(.upArrow, modifiers: [.command, .shift])
+            Button("Scroll to Bottom") { controller.scrollSelected(.bottom) }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .shift])
         }
     }
 }

@@ -200,6 +200,24 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
         }
     }
 
+    /// Scroll actions the View menu / keyboard shortcuts drive on the focused
+    /// terminal (works even when the mouse wheel keeps getting snapped to the
+    /// bottom by a continuously-repainting TUI).
+    enum ScrollAction { case pageUp, pageDown, lineUp, lineDown, top, bottom }
+
+    func scrollSelected(_ action: ScrollAction) {
+        guard let id = appState?.selectedSessionID, let view = views[id] else { return }
+        let bigJump = 1_000_000 // clamped internally to the buffer bounds
+        switch action {
+        case .pageUp:   view.pageUp()
+        case .pageDown: view.pageDown()
+        case .lineUp:   view.scrollUp(lines: 3)
+        case .lineDown: view.scrollDown(lines: 3)
+        case .top:      view.scrollUp(lines: bigJump)
+        case .bottom:   view.scrollDown(lines: bigJump)
+        }
+    }
+
     /// Send a line (a trailing newline is added) to each of the given sessions.
     func broadcast(_ command: String, to ids: [UUID]) {
         let line = command + "\n"
