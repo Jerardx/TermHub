@@ -133,7 +133,6 @@ struct ContentView: View {
     @State private var newSession: NewSessionDraft?
     @State private var editing: TerminalSession?
     @State private var showProfiles = false
-    @State private var showLogs = false
     @State private var editingProfile: Profile?
 
     var body: some View {
@@ -198,11 +197,6 @@ struct ContentView: View {
             .navigationTitle(appState.session(id: appState.selectedSessionID)?.title ?? "TermHub")
             .toolbar {
                 ToolbarItemGroup {
-                    Button { showLogs = true } label: {
-                        Image(systemName: "doc.text.magnifyingglass")
-                    }
-                    .help("Browse session output logs (full scrollable history)")
-
                     Button { toggleBroadcastBar() } label: {
                         Image(systemName: "antenna.radiowaves.left.and.right")
                     }
@@ -239,7 +233,6 @@ struct ContentView: View {
         .sheet(item: $newSession) { draft in NewSessionSheet(draft: draft) }
         .sheet(item: $editing) { session in EditSessionSheet(session: session) }
         .sheet(isPresented: $showProfiles) { ManageProfilesSheet() }
-        .sheet(isPresented: $showLogs) { LogViewerSheet(controller: controller) }
         .sheet(item: $editingProfile) { profile in ProfileEditorSheet(profile: profile) }
     }
 
