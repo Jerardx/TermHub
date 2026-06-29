@@ -41,6 +41,9 @@ quarantine when built locally), but other Macs would hit Gatekeeper.
 - `ContentView.swift` — `NavigationSplitView`, sidebar (DnD + context menus),
   split-pane layout (`PaneView` / `TerminalPaneView`), new/edit session sheets
 - `ProfilesView.swift` — profile manager + editor sheets
+- `LogViewerView.swift` — in-app log browser (`LogViewerSheet`), native
+  scrollable `LogTextView`, and `AnsiCleaner` (strips ANSI / resolves CR-BS-tab
+  overwrites) for readable history of any session's captured output
 - `Notifications.swift` — `Notifier`, safe wrapper around `UNUserNotificationCenter`
 - `HotKeyManager.swift` — global ⌘⌥T toggle via the Carbon Hot Key API
 
@@ -68,8 +71,10 @@ streaming) · per-session mute (suppresses the unread dot and the activity pulse
 persisted) · auto-run command per session · restart/stop · ⌘1–9 & ⌘[/⌘]
 navigation · global ⌘⌥T show/hide · exit notifications · 10k-line scrollback +
 per-session output log (raw pty mirror, recoverable even after a full-screen TUI;
-"Open Session Log" / "Reveal Log in Finder" in the context menu) · child shells
-terminated on app quit (no orphaned ptys) · profiles/templates (incl. "Save All
+"Open Session Log" / "Reveal Log in Finder" in the context menu) · in-app log
+viewer (toolbar 🔍 — scrollable, ANSI-cleaned, live-tailing browser of every
+session's log; the way to read full history for alt-screen TUI agents) · child
+shells terminated on app quit (no orphaned ptys) · profiles/templates (incl. "Save All
 Groups as Profile") · split view (up to 4 panes) · drag-and-drop reordering and
 moving sessions between groups.
 
