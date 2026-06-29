@@ -51,6 +51,43 @@ final class SessionTerminalView: LocalProcessTerminalView {
         if scrollPosition >= 0.999 { unlockScrollAndFlush() } else { lockScroll() }
     }
 
+    /// Handle a mouse-wheel event. If the running app captured the mouse
+    /// (fullscreen TUIs like Claude Code render in the alternate buffer and want
+    /// the wheel themselves), forward it as mouse button 4/5 so the app scrolls
+    /// its own viewport — that's what other terminals do. Otherwise scroll our
+    /// own scrollback (with scroll-lock). Shift bypasses forwarding so you can
+    /// always reach local scrollback. Returns true when the event was handled.
+    func handleScrollWheel(_ event: NSEvent) -> Bool {
+        let precise = event.hasPreciseScrollingDeltas
+        let delta = precise ? event.scrollingDeltaY : event.deltaY
+        guard delta != 0 else { return true }
+        let lines = max(1, precise ? Int((abs(delta) / 10).rounded()) : Int(abs(delta)))
+        let terminal = getTerminal()
+        let shift = event.modifierFlags.contains(.shift)
+
+        if terminal.mouseMode != .off && !shift {
+            let button = delta > 0 ? 4 : 5
+            let flags = event.modifierFlags
+            let buttonFlags = terminal.encodeButton(
+                button: button, release: false,
+                shift: false, meta: flags.contains(.option), control: flags.contains(.control))
+            let pt = convert(event.locationInWindow, from: nil)
+            let dims = terminal.getDims()
+            let cellW = bounds.width / CGFloat(max(1, dims.cols))
+            let cellH = bounds.height / CGFloat(max(1, dims.rows))
+            let col = max(0, min(dims.cols - 1, Int(pt.x / max(1, cellW))))
+            let row = max(0, min(dims.rows - 1, Int((bounds.height - pt.y) / max(1, cellH))))
+            for _ in 0..<min(lines, 10) {
+                terminal.sendEvent(buttonFlags: buttonFlags, x: col, y: row)
+            }
+            return true
+        }
+
+        if delta > 0 { scrollUp(lines: lines) } else { scrollDown(lines: lines) }
+        updateScrollLock()
+        return true
+    }
+
     /// Flush and detach the log file (on restart/stop/exit/teardown).
     func closeLog() {
         try? logHandle?.synchronize()
@@ -96,28 +133,20 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
         if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
     }
 
-    /// SwiftTerm's `scrollWheel` only reads the legacy `event.deltaY`, which is 0
-    /// for precise-scrolling devices (trackpads, Magic Mouse, many modern mice),
-    /// so the wheel does nothing there while click-drag selection still scrolls.
-    /// Its `scrollWheel` is `public` (not `open`), so we can't override it — catch
-    /// scroll events app-side instead and drive the hit terminal ourselves.
+    /// SwiftTerm's `scrollWheel` is `public` (not `open`), so it can't be
+    /// overridden from our module. Catch scroll events app-side instead and let
+    /// the hit terminal handle them (forward to the app when it captured the
+    /// mouse, otherwise scroll our scrollback). Consuming the event also avoids
+    /// SwiftTerm's own handler running on top of ours.
     private func installScrollMonitor() {
+        guard scrollMonitor == nil else { return }
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
             guard let window = event.window,
                   let hit = window.contentView?.hitTest(event.locationInWindow) else { return event }
             var view: NSView? = hit
             while let cur = view {
                 if let term = cur as? SessionTerminalView {
-                    let precise = event.hasPreciseScrollingDeltas
-                    let delta = precise ? event.scrollingDeltaY : event.deltaY
-                    if delta != 0 {
-                        let lines = precise
-                            ? max(1, Int((abs(delta) / 10).rounded()))
-                            : max(1, Int(abs(delta)))
-                        if delta > 0 { term.scrollUp(lines: lines) } else { term.scrollDown(lines: lines) }
-                        term.updateScrollLock()
-                    }
-                    return nil // consume so SwiftTerm's broken handler doesn't also run
+                    return term.handleScrollWheel(event) ? nil : event
                 }
                 view = cur.superview
             }
