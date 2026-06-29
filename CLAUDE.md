@@ -38,8 +38,14 @@ quarantine when built locally), but other Macs would hit Gatekeeper.
   `@MainActor ObservableObject` that owns everything + persistence)
 - `TerminalController.swift` — owns the live `SessionTerminalView`s and *vends*
   them to panes; manages pty lifecycle, restart/stop, exit handling
-- `ContentView.swift` — `NavigationSplitView`, sidebar (DnD + context menus),
-  split-pane layout (`PaneView` / `TerminalPaneView`), new/edit session sheets
+- `ContentView.swift` — root `NavigationSplitView` (toolbars, sheets wiring) +
+  `BroadcastBar`
+- `TerminalPane.swift` — `TerminalPaneView` (mounts the controller's NSView),
+  `PaneView` (pane chrome), `ScrollBar` (scroll-position indicator), the
+  `SessionState` status-color extension
+- `Sidebar.swift` — `SidebarView` (DnD + context menus), `GroupHeader`,
+  `SessionRow`
+- `SessionSheets.swift` — `NewSessionSheet` / `EditSessionSheet` (+ `NewSessionDraft`)
 - `ProfilesView.swift` — profile manager + editor sheets
 - `Notifications.swift` — `Notifier`, safe wrapper around `UNUserNotificationCenter`
 - `HotKeyManager.swift` — global ⌘⌥T toggle via the Carbon Hot Key API
