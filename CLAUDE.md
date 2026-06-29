@@ -76,10 +76,10 @@ navigation · working mouse-wheel scroll via an app-level scroll monitor
 (SwiftTerm's `scrollWheel` is `public` not `open`, so it's caught app-side):
 ordinary sessions scroll our scrollback (precise deltas, with scroll-lock);
 apps that captured the mouse (fullscreen alt-screen TUIs like Claude Code, vim,
-htop) are left alone — the wheel is a no-op there (alt buffer has no scrollback;
-use the app's own scroll, e.g. Claude Code's Ctrl+O transcript). NB: we do *not*
-forward the wheel as mouse events to such apps — doing so made them open links in
-the browser by themselves · scroll-lock: output is parked while you're scrolled
+htop) get the wheel forwarded as mouse button 4/5 so they scroll their own
+viewport (same as iTerm/Terminal.app — only genuine wheel buttons are sent,
+never a click; Shift forces local scrollback) · scroll-lock: output is parked
+while you're scrolled
 up into history and flushed when you return to the bottom, working around
 SwiftTerm snapping the viewport to the bottom on every new line (its
 `userScrolling` guard is internal/never set) · a thin right-edge scroll-position

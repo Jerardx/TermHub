@@ -51,21 +51,39 @@ final class SessionTerminalView: LocalProcessTerminalView {
         if scrollPosition >= 0.999 { unlockScrollAndFlush() } else { lockScroll() }
     }
 
-    /// Handle a mouse-wheel event for the scrollback of *normal* sessions.
+    /// Handle a mouse-wheel event.
     ///
-    /// Apps that captured the mouse (fullscreen alt-screen TUIs like Claude Code)
-    /// are left entirely alone: we return `false` so the event is not consumed
-    /// and we never synthesize mouse input for them. Forwarding the wheel as
-    /// mouse events made such apps open links in the browser by themselves, and
-    /// the alt buffer has no scrollback for us to scroll anyway — so the wheel is
-    /// simply a no-op there (use the app's own scroll, e.g. Claude Code's Ctrl+O
-    /// transcript). For ordinary output we scroll our scrollback with scroll-lock.
+    /// If the running app captured the mouse (fullscreen alt-screen TUIs like
+    /// Claude Code), forward the wheel to it as mouse button 4/5 — exactly what
+    /// iTerm/Terminal.app do, which is *why* scrolling works inside Claude Code
+    /// there. We only ever send genuine wheel buttons (64/65), never a click, so
+    /// this can't synthesize a link click. Otherwise we scroll our own scrollback
+    /// with scroll-lock. Shift forces local scrollback.
     func handleScrollWheel(_ event: NSEvent) -> Bool {
-        guard getTerminal().mouseMode == .off else { return false }
         let precise = event.hasPreciseScrollingDeltas
         let delta = precise ? event.scrollingDeltaY : event.deltaY
         guard delta != 0 else { return true }
         let lines = max(1, precise ? Int((abs(delta) / 10).rounded()) : Int(abs(delta)))
+        let terminal = getTerminal()
+
+        if terminal.mouseMode != .off && !event.modifierFlags.contains(.shift) {
+            let button = delta > 0 ? 4 : 5
+            let flags = event.modifierFlags
+            let buttonFlags = terminal.encodeButton(
+                button: button, release: false,
+                shift: false, meta: flags.contains(.option), control: flags.contains(.control))
+            let pt = convert(event.locationInWindow, from: nil)
+            let dims = terminal.getDims()
+            let cellW = bounds.width / CGFloat(max(1, dims.cols))
+            let cellH = bounds.height / CGFloat(max(1, dims.rows))
+            let col = max(0, min(dims.cols - 1, Int(pt.x / max(1, cellW))))
+            let row = max(0, min(dims.rows - 1, Int((bounds.height - pt.y) / max(1, cellH))))
+            for _ in 0..<min(lines, 8) {
+                terminal.sendEvent(buttonFlags: buttonFlags, x: col, y: row)
+            }
+            return true
+        }
+
         if delta > 0 { scrollUp(lines: lines) } else { scrollDown(lines: lines) }
         updateScrollLock()
         return true
