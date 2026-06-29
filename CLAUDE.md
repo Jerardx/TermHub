@@ -68,15 +68,16 @@ streaming) · per-session mute (suppresses the unread dot and the activity pulse
 persisted) · auto-run command per session · restart/stop · ⌘1–9 & ⌘[/⌘]
 navigation · working mouse-wheel scroll via an app-level scroll monitor
 (SwiftTerm's `scrollWheel` is `public` not `open`, so it's caught app-side):
-when the running app captured the mouse (fullscreen alt-screen TUIs like Claude
-Code, vim, htop) the wheel is forwarded to it as mouse button 4/5 so it scrolls
-its own viewport; otherwise it scrolls our scrollback — handling precise deltas,
-with Shift forcing local scrollback · scroll-lock: for non-mouse apps, output is
-parked while you're scrolled up into history and flushed when you return to the
-bottom, working around SwiftTerm snapping the viewport to the bottom on every new
-line (its `userScrolling` guard is internal/never set) · a thin right-edge
-scroll-position indicator (accent-tinted while parked) · keyboard scroll of the
-focused terminal
+ordinary sessions scroll our scrollback (precise deltas, with scroll-lock);
+apps that captured the mouse (fullscreen alt-screen TUIs like Claude Code, vim,
+htop) are left alone — the wheel is a no-op there (alt buffer has no scrollback;
+use the app's own scroll, e.g. Claude Code's Ctrl+O transcript). NB: we do *not*
+forward the wheel as mouse events to such apps — doing so made them open links in
+the browser by themselves · scroll-lock: output is parked while you're scrolled
+up into history and flushed when you return to the bottom, working around
+SwiftTerm snapping the viewport to the bottom on every new line (its
+`userScrolling` guard is internal/never set) · a thin right-edge scroll-position
+indicator (accent-tinted while parked) · keyboard scroll of the focused terminal
 (Scroll menu: ⇧PageUp/Down, ⌥⌘↑/↓ line, ⇧⌘↑/↓ top/bottom — reliable when a
 repainting TUI snaps the wheel to the bottom) · global ⌘⌥T show/hide · exit
 notifications · 10k-line scrollback +
