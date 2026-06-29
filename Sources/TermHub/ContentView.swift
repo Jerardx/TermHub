@@ -318,6 +318,12 @@ struct SidebarView: View {
         Button(appState.isBroadcastTarget(session.id) ? "Remove from Broadcast" : "Add to Broadcast") {
             appState.toggleBroadcast(session.id)
         }
+        Button {
+            appState.toggleMute(session.id)
+        } label: {
+            Label(session.isMuted ? "Unmute" : "Mute",
+                  systemImage: session.isMuted ? "speaker.wave.2" : "speaker.slash")
+        }
         if appState.groups.count > 1 {
             Menu("Move to Group") {
                 ForEach(appState.groups.filter { $0.id != group.id }) { target in
@@ -381,14 +387,30 @@ struct SessionRow: View {
     @ObservedObject var session: TerminalSession
     var isBroadcast: Bool = false
 
+    /// Pulse only for live output on an unmuted session.
+    private var isPulsing: Bool { session.isActive && !session.isMuted }
+
     var body: some View {
         HStack(spacing: 8) {
             Circle()
                 .fill(session.state.indicatorColor)
                 .frame(width: 8, height: 8)
+                .opacity(isPulsing ? 0.35 : 1)
+                .scaleEffect(isPulsing ? 1.25 : 1)
+                .animation(isPulsing
+                    ? .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
+                    : .default,
+                    value: isPulsing)
+                .help(isPulsing ? "Receiving output…" : "")
             Text(session.title)
                 .lineLimit(1)
             Spacer()
+            if session.isMuted {
+                Image(systemName: "speaker.slash")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .help("Muted")
+            }
             if isBroadcast {
                 Image(systemName: "antenna.radiowaves.left.and.right")
                     .font(.caption2)

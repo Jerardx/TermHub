@@ -21,21 +21,26 @@ final class TerminalSession: ObservableObject, Identifiable, Codable {
     @Published var command: String
     /// Working directory the shell starts in (empty = home directory).
     @Published var workingDirectory: String
+    /// When muted, this session does not raise the unread dot or pulse on output.
+    @Published var isMuted: Bool
 
     // Runtime-only state (not persisted).
     @Published var state: SessionState = .notStarted
     @Published var hasUnread: Bool = false
+    /// True while output is actively arriving (drives the pulsing indicator).
+    @Published var isActive: Bool = false
 
-    init(title: String, command: String = "", workingDirectory: String = "") {
+    init(title: String, command: String = "", workingDirectory: String = "", isMuted: Bool = false) {
         self.id = UUID()
         self.title = title
         self.command = command
         self.workingDirectory = workingDirectory
+        self.isMuted = isMuted
     }
 
     // MARK: Codable (persist configuration only, not live state)
     private enum CodingKeys: String, CodingKey {
-        case id, title, command, workingDirectory
+        case id, title, command, workingDirectory, isMuted
     }
 
     init(from decoder: Decoder) throws {
@@ -44,6 +49,7 @@ final class TerminalSession: ObservableObject, Identifiable, Codable {
         title = try c.decode(String.self, forKey: .title)
         command = try c.decodeIfPresent(String.self, forKey: .command) ?? ""
         workingDirectory = try c.decodeIfPresent(String.self, forKey: .workingDirectory) ?? ""
+        isMuted = try c.decodeIfPresent(Bool.self, forKey: .isMuted) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -52,6 +58,7 @@ final class TerminalSession: ObservableObject, Identifiable, Codable {
         try c.encode(title, forKey: .title)
         try c.encode(command, forKey: .command)
         try c.encode(workingDirectory, forKey: .workingDirectory)
+        try c.encode(isMuted, forKey: .isMuted)
     }
 }
 
@@ -255,6 +262,14 @@ final class AppState: ObservableObject {
 
     func clearUnread(_ id: UUID?) {
         session(id: id)?.hasUnread = false
+    }
+
+    /// Toggle mute for a session. Muting also clears any pending unread dot.
+    /// Mutating through the session triggers autosave via `objectWillChange`.
+    func toggleMute(_ id: UUID) {
+        guard let s = session(id: id) else { return }
+        s.isMuted.toggle()
+        if s.isMuted { s.hasUnread = false }
     }
 
     // MARK: Navigation

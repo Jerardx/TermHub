@@ -26,21 +26,26 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
     private var views: [UUID: SessionTerminalView] = [:]
     private weak var appState: AppState?
 
+    /// Per-session timers that switch `isActive` back off once output goes quiet.
+    private var activityTimers: [UUID: DispatchWorkItem] = [:]
+    /// How long after the last output a session is still considered "active".
+    private let activityFade: TimeInterval = 1.8
+
     func attach(_ appState: AppState) {
         self.appState = appState
     }
 
-    /// Ensure a (started) terminal exists for every session; drop deleted ones.
+    /// Drop terminals for sessions that no longer exist. Terminals for live
+    /// sessions are created (and started) lazily by `view(for:)` when a pane
+    /// first mounts them, so unopened sessions stay `.notStarted` (gray).
     func sync() {
         guard let appState else { return }
         let wanted = Set(appState.allSessions.map(\.id))
         for (id, view) in views where !wanted.contains(id) {
+            clearActivity(id)
             view.terminate()
             view.removeFromSuperview()
             views.removeValue(forKey: id)
-        }
-        for session in appState.allSessions where views[session.id] == nil {
-            _ = makeTerminal(for: session)
         }
     }
 
@@ -58,13 +63,36 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
         view.processDelegate = self
         view.onActivity = { [weak self, weak session] in
             guard let self, let session else { return }
+            // Muted sessions stay quiet: no unread dot, no activity pulse.
+            guard !session.isMuted else { return }
             if self.appState?.selectedSessionID != session.id {
                 session.hasUnread = true
             }
+            self.markActive(session)
         }
         views[session.id] = view
         start(session: session, in: view)
         return view
+    }
+
+    /// Mark a session as actively producing output and (re)arm its fade timer.
+    private func markActive(_ session: TerminalSession) {
+        session.isActive = true
+        activityTimers[session.id]?.cancel()
+        let id = session.id
+        let work = DispatchWorkItem { [weak self, weak session] in
+            session?.isActive = false
+            self?.activityTimers[id] = nil
+        }
+        activityTimers[id] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + activityFade, execute: work)
+    }
+
+    /// Stop the activity pulse immediately (restart/stop/exit/removal).
+    private func clearActivity(_ id: UUID) {
+        activityTimers[id]?.cancel()
+        activityTimers[id] = nil
+        appState?.session(id: id)?.isActive = false
     }
 
     private func start(session: TerminalSession, in view: SessionTerminalView) {
@@ -96,11 +124,15 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
 
     func restartSelected() {
         guard let id = appState?.selectedSessionID,
-              let session = appState?.session(id: id),
-              let view = views[id] else { return }
-        view.terminate()
-        view.removeFromSuperview()
-        views.removeValue(forKey: id)
+              let session = appState?.session(id: id) else { return }
+        // If a live view exists, tear it down first; otherwise this acts as a
+        // first start for a session that hasn't been opened yet.
+        if let view = views[id] {
+            clearActivity(id)
+            view.terminate()
+            view.removeFromSuperview()
+            views.removeValue(forKey: id)
+        }
         _ = makeTerminal(for: session)
         revision &+= 1 // tell panes to remount the fresh view
     }
@@ -125,6 +157,7 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
         let code = exitCode ?? 0
         Task { @MainActor [weak self] in
             guard let self, let session = self.appState?.session(id: view.sessionID) else { return }
+            self.clearActivity(session.id)
             session.state = .exited(code)
             let isForeground = NSApp.isActive && self.appState?.selectedSessionID == session.id
             if !isForeground {

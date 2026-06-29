@@ -63,7 +63,9 @@ quarantine when built locally), but other Macs would hit Gatekeeper.
 ## Features
 
 Groups & sessions CRUD · status indicators (running / exited-0 / failed) ·
-unread-output dot · auto-run command per session · restart/stop · ⌘1–9 & ⌘[/⌘]
+unread-output dot · live-activity pulse (status dot pulses while output is
+streaming) · per-session mute (suppresses the unread dot and the activity pulse;
+persisted) · auto-run command per session · restart/stop · ⌘1–9 & ⌘[/⌘]
 navigation · global ⌘⌥T show/hide · exit notifications · profiles/templates
 (incl. "Save All Groups as Profile") · split view (up to 4 panes) · drag-and-drop
 reordering and moving sessions between groups.
