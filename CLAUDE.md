@@ -51,6 +51,9 @@ quarantine when built locally), but other Macs would hit Gatekeeper.
 - `HotKeyManager.swift` — global ⌘⌥T toggle via the Carbon Hot Key API
 - `ControlServer.swift` — agent-control Unix socket (newline-delimited JSON) +
   log-tail/ANSI-strip helpers
+- `RestartScheduler.swift` — fires per-session `restartSchedule` (daily at
+  HH:MM / every N hours) through `TerminalController.restart`; interval
+  schedules re-anchor on every (re)start via `noteStarted`
 - `SettingsView.swift` — Settings scene (⌘,): master "Enable Agent Control"
   toggle + the `claude mcp add` command
 
@@ -77,8 +80,9 @@ that proxies `tools/call` to the app's control socket.
   off by default, toggled in Settings) is on, `ControlServer` listens on
   `~/Library/Application Support/TermHub/control.sock` (0600). Methods:
   `list_sessions`, `create_group`, `create_session` (starts immediately by
-  default, without stealing focus), `restart_session`, `stop_session`,
-  `read_output` (log tail, ANSI stripped). Sessions are addressed by title,
+  default, without stealing focus; optional `auto_start`,
+  `restart_every_hours`, `restart_daily_at`), `restart_session`,
+  `stop_session`, `read_output` (log tail, ANSI stripped). Sessions are addressed by title,
   `group/title`, or UUID. Each session has a persisted `agentControlAllowed`
   flag (default on; agent-created sessions always on) gating
   restart/stop/read — toggle via context menu, Edit sheet, or per-group menu.
@@ -95,7 +99,10 @@ unread-output dot · live-activity pulse (status dot pulses while output is
 streaming) · per-session mute (suppresses the unread dot and the activity pulse;
 persisted) · auto-run command per session · restart/stop · ⌘1–9 & ⌘[/⌘]
 navigation · agent control via MCP (create groups/sessions, restart/stop, read
-output — master toggle in Settings + per-session opt-out) · working mouse-wheel
+output — master toggle in Settings + per-session opt-out) · per-session
+auto-start on app launch ("Start on Launch", also per-group; sessions otherwise
+start lazily on first mount) · per-session restart schedule (daily at a time or
+every N hours; runs even for stopped sessions) · working mouse-wheel
 scroll via an app-level scroll monitor
 (SwiftTerm's `scrollWheel` is `public` not `open`, so it's caught app-side):
 ordinary sessions scroll our scrollback (precise deltas, with scroll-lock);

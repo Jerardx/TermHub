@@ -7,6 +7,7 @@ struct ContentView: View {
     @EnvironmentObject var appState: AppState
     let controller: TerminalController
     let controlServer: ControlServer
+    let scheduler: RestartScheduler
 
     @State private var newSession: NewSessionDraft?
     @State private var editing: TerminalSession?
@@ -105,6 +106,12 @@ struct ContentView: View {
             controller.attach(appState)
             controller.sync()
             controlServer.attach(appState: appState, controller: controller)
+            scheduler.attach(appState: appState, controller: controller)
+            // Auto-start flagged sessions (sessions otherwise start lazily on
+            // first mount, so nothing runs after an app relaunch until clicked).
+            for session in appState.allSessions where session.autoStart {
+                controller.ensureStarted(session.id)
+            }
         }
         .onChange(of: appState.allSessions.count) { _, _ in
             controller.sync()

@@ -68,6 +68,12 @@ struct SidebarView: View {
                   systemImage: session.isMuted ? "speaker.wave.2" : "speaker.slash")
         }
         Button {
+            appState.toggleAutoStart(session.id)
+        } label: {
+            Label(session.autoStart ? "Don't Start on Launch" : "Start on Launch",
+                  systemImage: "power")
+        }
+        Button {
             appState.toggleAgentControl(session.id)
         } label: {
             Label(session.agentControlAllowed ? "Disallow Agent Control" : "Allow Agent Control",
@@ -96,6 +102,10 @@ struct SidebarView: View {
         Button("Rename…") {
             renameText = group.name
             renamingGroup = group
+        }
+        Menu("Start on Launch") {
+            Button("Enable for All Sessions") { appState.setAutoStart(true, forGroup: group.id) }
+            Button("Disable for All Sessions") { appState.setAutoStart(false, forGroup: group.id) }
         }
         Menu("Agent Control") {
             Button("Allow for All Sessions") { appState.setAgentControl(true, forGroup: group.id) }
@@ -173,6 +183,18 @@ struct SessionRow: View {
             Text(session.title)
                 .lineLimit(1)
             Spacer()
+            if session.autoStart {
+                Image(systemName: "power")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .help("Starts on app launch")
+            }
+            if let schedule = session.restartSchedule {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .help("Restarts \(schedule.label)")
+            }
             if session.isMuted {
                 Image(systemName: "speaker.slash")
                     .font(.caption2)

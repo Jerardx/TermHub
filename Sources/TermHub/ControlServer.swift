@@ -252,7 +252,11 @@ final class ControlServer: ObservableObject {
                         "working_directory": s.workingDirectory,
                         "agent_control": s.agentControlAllowed,
                         "unread": s.hasUnread,
+                        "auto_start": s.autoStart,
                     ]
+                    if let schedule = s.restartSchedule {
+                        info["restart_schedule"] = schedule.label
+                    }
                     switch s.state {
                     case .notStarted:
                         info["status"] = "not_started"
@@ -297,12 +301,25 @@ final class ControlServer: ObservableObject {
             let names = appState.groups.map { "\"\($0.name)\"" }.joined(separator: ", ")
             throw ControlError("group \"\(groupName)\" not found (existing: \(names)); use create_group first")
         }
+        var schedule: RestartSchedule?
+        if let hours = params["restart_every_hours"] as? Int {
+            guard (1...168).contains(hours) else { throw ControlError("\"restart_every_hours\" must be 1–168") }
+            schedule = .every(hours: hours)
+        } else if let daily = params["restart_daily_at"] as? String {
+            let parts = daily.split(separator: ":").compactMap { Int($0) }
+            guard parts.count == 2, (0...23).contains(parts[0]), (0...59).contains(parts[1]) else {
+                throw ControlError("\"restart_daily_at\" must be \"HH:MM\" (24h)")
+            }
+            schedule = .daily(hour: parts[0], minute: parts[1])
+        }
         // Agent-created sessions are agent-controllable by design.
         let session = TerminalSession(
             title: title,
             command: params["command"] as? String ?? "",
             workingDirectory: params["working_directory"] as? String ?? "",
-            agentControlAllowed: true
+            agentControlAllowed: true,
+            autoStart: params["auto_start"] as? Bool ?? false,
+            restartSchedule: schedule
         )
         // Don't steal the user's focus for agent-created sessions.
         appState.addSession(to: group, session: session, select: false)

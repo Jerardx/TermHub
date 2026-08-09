@@ -13,6 +13,19 @@ enum SessionState: Equatable {
     }
 }
 
+/// When/how a session is automatically restarted (nil = no schedule).
+enum RestartSchedule: Codable, Equatable {
+    case daily(hour: Int, minute: Int)
+    case every(hours: Int)
+
+    var label: String {
+        switch self {
+        case .daily(let h, let m): return String(format: "daily at %02d:%02d", h, m)
+        case .every(let hours): return "every \(hours) h"
+        }
+    }
+}
+
 /// One terminal session: a shell (optionally auto-running a command) in a working directory.
 final class TerminalSession: ObservableObject, Identifiable, Codable {
     let id: UUID
@@ -26,6 +39,12 @@ final class TerminalSession: ObservableObject, Identifiable, Codable {
     /// Whether MCP agents may control this session (restart/stop/read output).
     /// On by default; can be switched off per session as a safety hatch.
     @Published var agentControlAllowed: Bool
+    /// Start this session automatically when the app launches (sessions
+    /// otherwise start lazily, on first mount into a pane).
+    @Published var autoStart: Bool
+    /// Automatic restart schedule (nil = none). Fires even if the session is
+    /// stopped — a schedule means "this should be running".
+    @Published var restartSchedule: RestartSchedule?
 
     // Runtime-only state (not persisted).
     @Published var state: SessionState = .notStarted
@@ -34,18 +53,20 @@ final class TerminalSession: ObservableObject, Identifiable, Codable {
     @Published var isActive: Bool = false
 
     init(title: String, command: String = "", workingDirectory: String = "", isMuted: Bool = false,
-         agentControlAllowed: Bool = true) {
+         agentControlAllowed: Bool = true, autoStart: Bool = false, restartSchedule: RestartSchedule? = nil) {
         self.id = UUID()
         self.title = title
         self.command = command
         self.workingDirectory = workingDirectory
         self.isMuted = isMuted
         self.agentControlAllowed = agentControlAllowed
+        self.autoStart = autoStart
+        self.restartSchedule = restartSchedule
     }
 
     // MARK: Codable (persist configuration only, not live state)
     private enum CodingKeys: String, CodingKey {
-        case id, title, command, workingDirectory, isMuted, agentControlAllowed
+        case id, title, command, workingDirectory, isMuted, agentControlAllowed, autoStart, restartSchedule
     }
 
     init(from decoder: Decoder) throws {
@@ -56,6 +77,8 @@ final class TerminalSession: ObservableObject, Identifiable, Codable {
         workingDirectory = try c.decodeIfPresent(String.self, forKey: .workingDirectory) ?? ""
         isMuted = try c.decodeIfPresent(Bool.self, forKey: .isMuted) ?? false
         agentControlAllowed = try c.decodeIfPresent(Bool.self, forKey: .agentControlAllowed) ?? true
+        autoStart = try c.decodeIfPresent(Bool.self, forKey: .autoStart) ?? false
+        restartSchedule = try c.decodeIfPresent(RestartSchedule.self, forKey: .restartSchedule)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -66,6 +89,8 @@ final class TerminalSession: ObservableObject, Identifiable, Codable {
         try c.encode(workingDirectory, forKey: .workingDirectory)
         try c.encode(isMuted, forKey: .isMuted)
         try c.encode(agentControlAllowed, forKey: .agentControlAllowed)
+        try c.encode(autoStart, forKey: .autoStart)
+        try c.encodeIfPresent(restartSchedule, forKey: .restartSchedule)
     }
 }
 
@@ -294,6 +319,17 @@ final class AppState: ObservableObject {
     func setAgentControl(_ allowed: Bool, forGroup groupID: UUID) {
         guard let g = groups.first(where: { $0.id == groupID }) else { return }
         for s in g.sessions { s.agentControlAllowed = allowed }
+    }
+
+    /// Toggle start-on-launch for a session.
+    func toggleAutoStart(_ id: UUID) {
+        session(id: id)?.autoStart.toggle()
+    }
+
+    /// Enable or disable start-on-launch for every session in a group.
+    func setAutoStart(_ enabled: Bool, forGroup groupID: UUID) {
+        guard let g = groups.first(where: { $0.id == groupID }) else { return }
+        for s in g.sessions { s.autoStart = enabled }
     }
 
     // MARK: Navigation

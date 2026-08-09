@@ -37,10 +37,11 @@ struct TermHubApp: App {
     @StateObject private var appState = AppState()
     @StateObject private var controller = TerminalController()
     @StateObject private var controlServer = ControlServer()
+    @StateObject private var scheduler = RestartScheduler()
 
     var body: some Scene {
         WindowGroup("TermHub") {
-            ContentView(controller: controller, controlServer: controlServer)
+            ContentView(controller: controller, controlServer: controlServer, scheduler: scheduler)
                 .environmentObject(appState)
                 .frame(minWidth: 800, minHeight: 500)
         }

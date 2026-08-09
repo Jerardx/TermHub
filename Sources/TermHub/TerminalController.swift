@@ -113,6 +113,8 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
 
     private var views: [UUID: SessionTerminalView] = [:]
     private weak var appState: AppState?
+    /// Notified whenever a session (re)starts, to re-anchor interval schedules.
+    weak var scheduler: RestartScheduler?
 
     /// Per-session timers that switch `isActive` back off once output goes quiet.
     private var activityTimers: [UUID: DispatchWorkItem] = [:]
@@ -263,6 +265,7 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
         view.logHandle = openLog(for: session.id)
         session.state = .running
         session.hasUnread = false
+        scheduler?.noteStarted(session.id)
 
         let cmd = session.command.trimmingCharacters(in: .whitespacesAndNewlines)
         if !cmd.isEmpty {
