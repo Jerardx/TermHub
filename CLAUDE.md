@@ -49,6 +49,14 @@ quarantine when built locally), but other Macs would hit Gatekeeper.
 - `ProfilesView.swift` — profile manager + editor sheets
 - `Notifications.swift` — `Notifier`, safe wrapper around `UNUserNotificationCenter`
 - `HotKeyManager.swift` — global ⌘⌥T toggle via the Carbon Hot Key API
+- `ControlServer.swift` — agent-control Unix socket (newline-delimited JSON) +
+  log-tail/ANSI-strip helpers
+- `SettingsView.swift` — Settings scene (⌘,): master "Enable Agent Control"
+  toggle + the `claude mcp add` command
+
+`Sources/TermHubMCP/main.swift` is a separate dependency-free executable
+(`termhub-mcp`): a minimal MCP stdio server (newline-delimited JSON-RPC 2.0)
+that proxies `tools/call` to the app's control socket.
 
 ## Architecture notes
 
@@ -65,6 +73,20 @@ quarantine when built locally), but other Macs would hit Gatekeeper.
   profiles → `profiles.json`. Live state (running/exited/unread) is not persisted.
   Nested `@Published` changes are autosaved via Combine subscriptions
   (`rewireAutosave`).
+- **Agent control (MCP):** while `AppState.agentControlEnabled` (UserDefaults,
+  off by default, toggled in Settings) is on, `ControlServer` listens on
+  `~/Library/Application Support/TermHub/control.sock` (0600). Methods:
+  `list_sessions`, `create_group`, `create_session` (starts immediately by
+  default, without stealing focus), `restart_session`, `stop_session`,
+  `read_output` (log tail, ANSI stripped). Sessions are addressed by title,
+  `group/title`, or UUID. Each session has a persisted `agentControlAllowed`
+  flag (default on; agent-created sessions always on) gating
+  restart/stop/read — toggle via context menu, Edit sheet, or per-group menu.
+  `termhub-mcp` (bundled into the .app by `make-app.sh`) exposes this socket
+  as MCP tools: `claude mcp add termhub -- <app>/Contents/MacOS/termhub-mcp`.
+  Do NOT launch TermHub during development to test this — the user runs their
+  own live instance; test `termhub-mcp` standalone or poke the socket of the
+  running instance.
 
 ## Features
 
@@ -72,7 +94,9 @@ Groups & sessions CRUD · status indicators (running / exited-0 / failed) ·
 unread-output dot · live-activity pulse (status dot pulses while output is
 streaming) · per-session mute (suppresses the unread dot and the activity pulse;
 persisted) · auto-run command per session · restart/stop · ⌘1–9 & ⌘[/⌘]
-navigation · working mouse-wheel scroll via an app-level scroll monitor
+navigation · agent control via MCP (create groups/sessions, restart/stop, read
+output — master toggle in Settings + per-session opt-out) · working mouse-wheel
+scroll via an app-level scroll monitor
 (SwiftTerm's `scrollWheel` is `public` not `open`, so it's caught app-side):
 ordinary sessions scroll our scrollback (precise deltas, with scroll-lock);
 apps that captured the mouse (fullscreen alt-screen TUIs like Claude Code, vim,

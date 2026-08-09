@@ -6,6 +6,7 @@ import AppKit
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     let controller: TerminalController
+    let controlServer: ControlServer
 
     @State private var newSession: NewSessionDraft?
     @State private var editing: TerminalSession?
@@ -103,6 +104,7 @@ struct ContentView: View {
         .onAppear {
             controller.attach(appState)
             controller.sync()
+            controlServer.attach(appState: appState, controller: controller)
         }
         .onChange(of: appState.allSessions.count) { _, _ in
             controller.sync()

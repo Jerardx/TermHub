@@ -26,6 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // Stop every live child shell so pty children don't survive as orphans.
         TerminalController.shared?.terminateAll()
+        // Remove the agent control socket file.
+        ControlServer.shared?.shutdownNow()
     }
 }
 
@@ -34,16 +36,21 @@ struct TermHubApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var appState = AppState()
     @StateObject private var controller = TerminalController()
+    @StateObject private var controlServer = ControlServer()
 
     var body: some Scene {
         WindowGroup("TermHub") {
-            ContentView(controller: controller)
+            ContentView(controller: controller, controlServer: controlServer)
                 .environmentObject(appState)
                 .frame(minWidth: 800, minHeight: 500)
         }
         .windowStyle(.titleBar)
         .commands {
             SessionCommands(appState: appState, controller: controller)
+        }
+        Settings {
+            SettingsView()
+                .environmentObject(appState)
         }
     }
 }

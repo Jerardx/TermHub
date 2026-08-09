@@ -202,7 +202,10 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
 
     @discardableResult
     private func makeTerminal(for session: TerminalSession) -> SessionTerminalView {
-        let view = SessionTerminalView(frame: .zero)
+        // A real initial frame so sessions started without a mounted pane (e.g.
+        // created by an agent over the control socket) get a sane pty size;
+        // panes resize it on mount anyway.
+        let view = SessionTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 480))
         view.sessionID = session.id
         view.processDelegate = self
         view.onActivity = { [weak self, weak session] in
@@ -271,11 +274,11 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
 
     // MARK: Actions
 
-    func restartSelected() {
-        guard let id = appState?.selectedSessionID,
-              let session = appState?.session(id: id) else { return }
-        // If a live view exists, tear it down first; otherwise this acts as a
-        // first start for a session that hasn't been opened yet.
+    /// (Re)start a session by id. If a live view exists it is torn down first;
+    /// otherwise this acts as a first start for a session that hasn't been
+    /// opened yet.
+    func restart(_ id: UUID) {
+        guard let session = appState?.session(id: id) else { return }
         if let view = views[id] {
             clearActivity(id)
             view.closeLog()
@@ -287,9 +290,40 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
         revision &+= 1 // tell panes to remount the fresh view
     }
 
-    func terminateSelected() {
-        guard let id = appState?.selectedSessionID, let view = views[id] else { return }
+    func restartSelected() {
+        guard let id = appState?.selectedSessionID else { return }
+        restart(id)
+    }
+
+    /// Stop the process of a session by id (no-op if it was never started).
+    ///
+    /// `view.terminate()` closes the pty master, which reliably hangs up the
+    /// shell (its SIGTERM alone is ignored by interactive shells) — but it also
+    /// cancels SwiftTerm's process monitor, so `processTerminated` never fires.
+    /// Update the session state ourselves or it would show "running" forever.
+    func terminate(_ id: UUID) {
+        guard let view = views[id] else { return }
+        let wasRunning = appState?.session(id: id)?.state.isRunning ?? false
         view.terminate()
+        guard wasRunning else { return }
+        clearActivity(id)
+        view.closeLog()
+        appState?.session(id: id)?.state = .exited(0)
+    }
+
+    func terminateSelected() {
+        guard let id = appState?.selectedSessionID else { return }
+        terminate(id)
+    }
+
+    /// Whether a live terminal exists for the session (started at some point).
+    func isStarted(_ id: UUID) -> Bool { views[id] != nil }
+
+    /// Create + start the session's terminal if it hasn't been opened yet
+    /// (used by the control socket so agent-created sessions run immediately,
+    /// without waiting for a pane to mount them).
+    func ensureStarted(_ id: UUID) {
+        _ = view(for: id)
     }
 
     /// Stop every live child shell. Called on app quit so pty children don't
@@ -343,6 +377,10 @@ final class TerminalController: NSObject, ObservableObject, LocalProcessTerminal
         let code = exitCode ?? 0
         Task { @MainActor [weak self] in
             guard let self, let session = self.appState?.session(id: view.sessionID) else { return }
+            // A restart replaces the view before the old process's termination
+            // callback lands; ignore stale views so they can't overwrite the
+            // fresh session's .running state.
+            guard self.views[session.id] === view else { return }
             self.clearActivity(session.id)
             view.closeLog()
             session.state = .exited(code)

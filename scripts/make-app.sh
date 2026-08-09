@@ -10,13 +10,14 @@ cd "$ROOT"
 echo "==> Building ($CONFIG)…"
 swift build -c "$CONFIG"
 
-BIN="$(swift build -c "$CONFIG" --show-bin-path)/TermHub"
+BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
 APP="$ROOT/build/TermHub.app"
 
 echo "==> Assembling bundle…"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/TermHub"
+cp "$BIN_DIR/TermHub" "$APP/Contents/MacOS/TermHub"
+cp "$BIN_DIR/termhub-mcp" "$APP/Contents/MacOS/termhub-mcp"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 
 # App icon (optional — generate with ./scripts/make-icon.sh).

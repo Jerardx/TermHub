@@ -96,6 +96,10 @@ struct EditSessionSheet: View {
                 Text("Command and working dir apply the next time the session is restarted.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Toggle("Allow agent control (MCP)", isOn: $session.agentControlAllowed)
+                Text("When off, agents can't restart, stop, or read this session.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .formStyle(.grouped)
             Divider()

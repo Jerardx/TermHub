@@ -19,6 +19,15 @@ let package = Package(
             swiftSettings: [
                 .swiftLanguageMode(.v5)
             ]
+        ),
+        // Thin MCP (Model Context Protocol) stdio server that proxies tool calls
+        // to the running app over its control socket. No dependencies.
+        .executableTarget(
+            name: "termhub-mcp",
+            path: "Sources/TermHubMCP",
+            swiftSettings: [
+                .swiftLanguageMode(.v5)
+            ]
         )
     ]
 )

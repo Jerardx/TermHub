@@ -23,6 +23,9 @@ final class TerminalSession: ObservableObject, Identifiable, Codable {
     @Published var workingDirectory: String
     /// When muted, this session does not raise the unread dot or pulse on output.
     @Published var isMuted: Bool
+    /// Whether MCP agents may control this session (restart/stop/read output).
+    /// On by default; can be switched off per session as a safety hatch.
+    @Published var agentControlAllowed: Bool
 
     // Runtime-only state (not persisted).
     @Published var state: SessionState = .notStarted
@@ -30,17 +33,19 @@ final class TerminalSession: ObservableObject, Identifiable, Codable {
     /// True while output is actively arriving (drives the pulsing indicator).
     @Published var isActive: Bool = false
 
-    init(title: String, command: String = "", workingDirectory: String = "", isMuted: Bool = false) {
+    init(title: String, command: String = "", workingDirectory: String = "", isMuted: Bool = false,
+         agentControlAllowed: Bool = true) {
         self.id = UUID()
         self.title = title
         self.command = command
         self.workingDirectory = workingDirectory
         self.isMuted = isMuted
+        self.agentControlAllowed = agentControlAllowed
     }
 
     // MARK: Codable (persist configuration only, not live state)
     private enum CodingKeys: String, CodingKey {
-        case id, title, command, workingDirectory, isMuted
+        case id, title, command, workingDirectory, isMuted, agentControlAllowed
     }
 
     init(from decoder: Decoder) throws {
@@ -50,6 +55,7 @@ final class TerminalSession: ObservableObject, Identifiable, Codable {
         command = try c.decodeIfPresent(String.self, forKey: .command) ?? ""
         workingDirectory = try c.decodeIfPresent(String.self, forKey: .workingDirectory) ?? ""
         isMuted = try c.decodeIfPresent(Bool.self, forKey: .isMuted) ?? false
+        agentControlAllowed = try c.decodeIfPresent(Bool.self, forKey: .agentControlAllowed) ?? true
     }
 
     func encode(to encoder: Encoder) throws {
@@ -59,6 +65,7 @@ final class TerminalSession: ObservableObject, Identifiable, Codable {
         try c.encode(command, forKey: .command)
         try c.encode(workingDirectory, forKey: .workingDirectory)
         try c.encode(isMuted, forKey: .isMuted)
+        try c.encode(agentControlAllowed, forKey: .agentControlAllowed)
     }
 }
 
@@ -170,6 +177,12 @@ final class AppState: ObservableObject {
 
     static let maxPanes = 4
 
+    /// Master switch for the agent control socket / MCP server. Off by default;
+    /// persisted in UserDefaults (it's an app preference, not workspace config).
+    @Published var agentControlEnabled: Bool = UserDefaults.standard.bool(forKey: "agentControlEnabled") {
+        didSet { UserDefaults.standard.set(agentControlEnabled, forKey: "agentControlEnabled") }
+    }
+
     /// Broadcast input feature: sessions that receive broadcast commands.
     @Published var broadcastTargets: Set<UUID> = []
     @Published var showBroadcastBar: Bool = false
@@ -270,6 +283,17 @@ final class AppState: ObservableObject {
         guard let s = session(id: id) else { return }
         s.isMuted.toggle()
         if s.isMuted { s.hasUnread = false }
+    }
+
+    /// Toggle per-session agent (MCP) access.
+    func toggleAgentControl(_ id: UUID) {
+        session(id: id)?.agentControlAllowed.toggle()
+    }
+
+    /// Allow or deny agent (MCP) access for every session in a group.
+    func setAgentControl(_ allowed: Bool, forGroup groupID: UUID) {
+        guard let g = groups.first(where: { $0.id == groupID }) else { return }
+        for s in g.sessions { s.agentControlAllowed = allowed }
     }
 
     // MARK: Navigation

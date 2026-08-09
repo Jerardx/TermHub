@@ -67,6 +67,12 @@ struct SidebarView: View {
             Label(session.isMuted ? "Unmute" : "Mute",
                   systemImage: session.isMuted ? "speaker.wave.2" : "speaker.slash")
         }
+        Button {
+            appState.toggleAgentControl(session.id)
+        } label: {
+            Label(session.agentControlAllowed ? "Disallow Agent Control" : "Allow Agent Control",
+                  systemImage: session.agentControlAllowed ? "bolt.slash" : "bolt")
+        }
         if appState.groups.count > 1 {
             Menu("Move to Group") {
                 ForEach(appState.groups.filter { $0.id != group.id }) { target in
@@ -90,6 +96,10 @@ struct SidebarView: View {
         Button("Rename…") {
             renameText = group.name
             renamingGroup = group
+        }
+        Menu("Agent Control") {
+            Button("Allow for All Sessions") { appState.setAgentControl(true, forGroup: group.id) }
+            Button("Disallow for All Sessions") { appState.setAgentControl(false, forGroup: group.id) }
         }
         Divider()
         Button("Move Up") { appState.moveGroup(group.id, by: -1) }
@@ -168,6 +178,12 @@ struct SessionRow: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .help("Muted")
+            }
+            if !session.agentControlAllowed {
+                Image(systemName: "bolt.slash")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .help("Agent control disabled")
             }
             if isBroadcast {
                 Image(systemName: "antenna.radiowaves.left.and.right")
