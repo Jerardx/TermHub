@@ -39,6 +39,14 @@ processes (dev servers, logs, ssh, builds, AI agents) from a single window.
 - **Profiles / templates** — capture a group or the whole workspace and relaunch
   it with one click
 - **Auto-run command** per session, restart / stop, exit notifications
+- **Agent control (MCP)** — let AI agents (e.g. Claude Code) manage TermHub:
+  list sessions, create groups/sessions, restart/stop them, and read their
+  output to diagnose failures. Off by default; per-session opt-out. See
+  [Agent control](#agent-control-mcp) below
+- **Start on Launch** — flagged sessions start automatically (in the
+  background) when the app launches; toggle per session or per group
+- **Restart schedules** — restart a session daily at a set time or every
+  N hours; runs even if the session is stopped
 - **Keyboard navigation** — ⌘1–9, ⌘[ / ⌘] between sessions; global ⌘⌥T show/hide
 - Child shells are terminated on quit (no orphaned ptys)
 
@@ -48,6 +56,45 @@ processes (dev servers, logs, ssh, builds, AI agents) from a single window.
 2. Open the DMG and drag **TermHub** into **Applications**
 3. First launch: right-click **TermHub → Open** (it's ad-hoc signed, not
    notarized, so Gatekeeper asks once)
+
+## Agent control (MCP)
+
+TermHub ships with a built-in [MCP](https://modelcontextprotocol.io) server, so
+an AI agent can manage your sessions — spin up a dev server in a new group,
+check why a process died by reading its log, restart it, or set up a scheduled
+restart — while you watch everything live in the app.
+
+Setup:
+
+1. In TermHub open **Settings (⌘,)** and enable **Agent Control (MCP)**
+   (off by default).
+2. Register the bundled server with Claude Code (the same command is shown in
+   Settings with a Copy button):
+
+   ```bash
+   claude mcp add termhub -- /Applications/TermHub.app/Contents/MacOS/termhub-mcp
+   ```
+
+Available tools:
+
+| Tool | What it does |
+| --- | --- |
+| `list_sessions` | Groups + sessions with status, exit codes, commands |
+| `create_group` | Add a sidebar group |
+| `create_session` | Add a session (starts immediately; optional auto-start & restart schedule) |
+| `restart_session` | Restart (or first-start) a session |
+| `stop_session` | Stop a session's process |
+| `read_output` | Tail a session's log, ANSI-stripped — for diagnosing failures |
+
+How it works & safety:
+
+- The app listens on a Unix socket (`~/Library/Application Support/TermHub/control.sock`,
+  permissions `0600`) only while the master toggle is on; `termhub-mcp` is a
+  thin stdio proxy to that socket, so everything stays local to your Mac.
+- Any session can opt out via **Allow Agent Control** in its context menu (or
+  per group) — agents then can't restart, stop, or read it. Sessions created
+  by an agent are always agent-controllable.
+- Sessions are addressed by title, `group/title`, or id.
 
 ## Build from source
 
