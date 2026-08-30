@@ -546,7 +546,17 @@ final class AppState: ObservableObject {
         cancellables.removeAll()
         for g in groups {
             g.objectWillChange
-                .sink { [weak self] in DispatchQueue.main.async { self?.save() } }
+                .sink { [weak self] in
+                    // Nested ObservableObjects don't propagate to AppState on
+                    // their own: forward group-level changes (sessions added/
+                    // removed/moved, renames) so views observing AppState
+                    // re-render. Without this, sessions created in the
+                    // background (e.g. by an agent over MCP, which doesn't
+                    // change the selection) stay invisible until an unrelated
+                    // AppState change redraws the sidebar.
+                    self?.objectWillChange.send()
+                    DispatchQueue.main.async { self?.save() }
+                }
                 .store(in: &cancellables)
             for s in g.sessions {
                 s.objectWillChange
