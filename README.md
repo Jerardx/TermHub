@@ -1,22 +1,24 @@
-# TermHub
-
-A native **macOS terminal session manager**. A sidebar lists terminal sessions
-organised into collapsible groups; the detail area shows one or more live
-terminals (split view) you can work in. Built for running and monitoring many
-processes (dev servers, logs, ssh, builds, AI agents) from a single window.
-
 <p align="center">
-  <a href="https://github.com/Jerardx/TermHub/releases/latest/download/TermHub.dmg">
-    <img src="https://img.shields.io/badge/⬇%20Download-TermHub.dmg-2ea44f?style=for-the-badge&logo=apple&logoColor=white" alt="Download TermHub.dmg">
-  </a>
-  &nbsp;
-  <a href="https://github.com/Jerardx/TermHub/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Jerardx/TermHub?style=for-the-badge&label=Latest&color=blue" alt="Latest release">
-  </a>
+  <img src="icon-trimmed.png" width="128" alt="TermHub icon">
 </p>
 
-> The app is **ad-hoc signed**, not notarized. On first launch right-click the
-> app → **Open** (or allow it in **System Settings → Privacy & Security**).
+<h1 align="center">TermHub</h1>
+
+<p align="center">
+  A native <b>macOS terminal session manager</b> — run and monitor many
+  processes (dev servers, logs, ssh, builds, AI agents) from a single window.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-14%2B-black?style=flat-square&logo=apple" alt="macOS 14+">
+  <img src="https://img.shields.io/badge/Swift-SwiftUI%20%2B%20SwiftTerm-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift">
+  <img src="https://img.shields.io/badge/build-SwiftPM%2C%20no%20Xcode-blue?style=flat-square" alt="SwiftPM">
+  <img src="https://img.shields.io/github/v/release/Jerardx/TermHub?style=flat-square&label=version" alt="Latest release">
+</p>
+
+A sidebar lists terminal sessions organised into collapsible groups; the detail
+area shows one or more live terminals (split view, up to 4 panes) you can work
+in. Sessions keep running in the background across any layout change.
 
 ## Features
 
@@ -50,12 +52,36 @@ processes (dev servers, logs, ssh, builds, AI agents) from a single window.
 - **Keyboard navigation** — ⌘1–9, ⌘[ / ⌘] between sessions; global ⌘⌥T show/hide
 - Child shells are terminated on quit (no orphaned ptys)
 
-## Install
+## Install (build from source)
 
-1. [**Download TermHub.dmg**](https://github.com/Jerardx/TermHub/releases/latest/download/TermHub.dmg)
-2. Open the DMG and drag **TermHub** into **Applications**
-3. First launch: right-click **TermHub → Open** (it's ad-hoc signed, not
-   notarized, so Gatekeeper asks once)
+TermHub is distributed as source. Building takes a couple of minutes and needs
+only the **Command Line Tools** — there is no Xcode project, and `xcodebuild`
+is not used.
+
+**Requirements:** macOS 14+ and the Command Line Tools
+(`xcode-select --install` if you don't have them).
+
+```bash
+git clone https://github.com/Jerardx/TermHub.git
+cd TermHub
+./scripts/make-app.sh release        # builds + ad-hoc signs build/TermHub.app
+cp -R build/TermHub.app /Applications/
+```
+
+That's it — apps built locally have no quarantine flag, so Gatekeeper won't
+complain. (This is also why prebuilt binaries aren't published: the app is
+ad-hoc signed, not notarized, so a downloaded copy would be blocked on other
+Macs.)
+
+Optional: `./scripts/make-dmg.sh` packages the app into `build/TermHub.dmg`
+for your own distribution.
+
+### Development
+
+```bash
+swift build              # compile
+swift run TermHub        # run without a .app bundle
+```
 
 ## Agent control (MCP)
 
@@ -64,16 +90,20 @@ an AI agent can manage your sessions — spin up a dev server in a new group,
 check why a process died by reading its log, restart it, or set up a scheduled
 restart — while you watch everything live in the app.
 
-Setup:
+**It is off by default** — nothing listens until you enable it:
 
-1. In TermHub open **Settings (⌘,)** and enable **Agent Control (MCP)**
-   (off by default).
-2. Register the bundled server with Claude Code (the same command is shown in
-   Settings with a Copy button):
+1. In TermHub open **Settings (⌘,)** and turn on **Enable Agent Control (MCP)**.
+2. Register the bundled server with Claude Code — the exact command is shown in
+   Settings with a **Copy** button:
 
    ```bash
    claude mcp add termhub -- /Applications/TermHub.app/Contents/MacOS/termhub-mcp
    ```
+
+   (If you run the app from somewhere else, point the command at that bundle's
+   `Contents/MacOS/termhub-mcp` instead.)
+3. Ask your agent to e.g. *"create a group 'backend' with a session running
+   `npm run dev`, and check its output if it fails"*.
 
 Available tools:
 
@@ -95,19 +125,6 @@ How it works & safety:
   per group) — agents then can't restart, stop, or read it. Sessions created
   by an agent are always agent-controllable.
 - Sessions are addressed by title, `group/title`, or id.
-
-## Build from source
-
-Only the **Command Line Tools** are required — there is no Xcode project, and
-`xcodebuild` is intentionally not used.
-
-```bash
-swift build                 # compile
-swift run TermHub           # run for development (no .app bundle)
-
-./scripts/make-app.sh release   # assemble + ad-hoc sign build/TermHub.app
-./scripts/make-dmg.sh           # build build/TermHub.dmg
-```
 
 ## Tech stack
 
